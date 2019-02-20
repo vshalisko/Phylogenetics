@@ -1,0 +1,166 @@
+---
+title: "Generic phylogenetic tree visualization"
+author: "Viacheslav Shalisko"
+date: "January 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("treeio")
+library("ggtree")
+library("ggrepel")
+```
+
+```{r}
+## test of treeio and ggtree
+#nwk <- system.file("extdata", "sample.nwk", package="treeio")
+#tree <- read.tree(nwk)
+#ggplot(tree, aes(x, y)) + geom_tree() + theme_tree()
+```
+
+```{r}
+# read raw RAxML output
+#raxml_file <- "RAxML_bipartitions.RAxML_new2"
+#raxml <- read.newick(raxml_file)
+
+# read RAxML output transformed with figtree, adding label bootstrap
+raxml_file <- "RAxML_bipartitions.RAxML_new2.figtree"
+raxml <- read.beast(raxml_file)
+
+# file format for taxa_annotations.csv
+# ========================
+#taxa,newsample,taxa_ok
+#Acrosorus_friderici_et_pauli_Parris_12793,0,Acrosorus friderici-et-pauli Parris 12793
+#Adenophorus_oahuensis_Ranker_969,0,Adenophorus oahuensis Ranker 969
+#Adenophorus_periens_Ranker_1114,0,Adenophorus periens Ranker 1114
+
+
+taxa_annotations_file <- "taxa_annotations.csv"
+taxa_annotations <- read.csv(taxa_annotations_file,header=TRUE)
+
+# file format for mrbayes_node_annotations.csv
+# ========================
+#node,posterior
+#270,
+#271,1
+#272,1
+#273,1
+#274,1
+#275,1
+#276,1
+#277,0.7842
+#278,
+#279,1
+#280,1
+
+
+mrbayes_node_annotations_file <- "mrbayes_node_annotations.csv"
+mrbayes_node_annotations <- read.csv(mrbayes_node_annotations_file,header=TRUE)
+
+```
+
+
+## Full tree with node numbers
+
+```{r fig.height = 35, fig.width = 10}
+
+
+p <- ggtree(raxml, aes(x, y)) + geom_tree() + theme_tree()
+p <- p + geom_treescale(offset = -1, x=0, y=-1, width=0.05)
+p <- p 
+
+
+pb <- p %<+% taxa_annotations
+pa <- pb %<+% mrbayes_node_annotations
+
+# display tree with node numbers
+p_nodenumbers <- p + geom_tiplab(size=3, color="darkgray")
+p_nodenumbers + geom_text2(aes(subset=!isTip, label=node), hjust=-.3, color="red", size=3) + geom_nodepoint(color='red')
+
+
+
+```
+
+## Full tree with node support levels annotations (BS/PP)
+
+```{r fig.height = 50, fig.width = 10}
+label_format = function(BS,PP) {
+
+  BS <- round(BS, 2)
+  PP <- round(PP, 2)
+  
+  BS[is.na(BS)] <- "-"
+  PP[is.na(PP)] <- "-"
+  
+  AN <- paste(BS,PP,sep="/")
+  AN[AN == "-/-"] <- ""
+  #AN[AN == "100/1"] <- "*"
+  AN
+}
+
+
+pa + geom_tiplab(size=3.5, aes(fontface=newsample+1, label=taxa_ok)) + 
+  #geom_text2(aes(subset=!isTip, label=round(bootstrap, 2)), hjust=1.3, vjust=-0.8, size=3) +
+  #geom_text2(aes(subset=!isTip, label=round(posterior, 2)), hjust=1.3, vjust=-0.2, color="red", size=2) +
+  geom_text2(aes(subset=!isTip, label=label_format(bootstrap,posterior)), hjust=1.3, vjust=-0.8, size=2.5) +
+  #geom_label_repel(aes(subset=!isTip, label=label_format(bootstrap,posterior)), size = 2.5) + 
+  #geom_nodelab(aes(x=branch, label=round(bootstrap, 2)), vjust=-.5, size=2) + 
+  #geom_point2(aes(subset=(node == 363)), size=5, shape=23, fill="steelblue") + 
+  ggplot2::xlim(0, 0.4)
+```
+
+## Full tree with node support levels annotations (BS/PP)
+### use of ggrepel library
+
+```{r fig.height = 50, fig.width = 10}
+
+pa + geom_tiplab(size=3.5, aes(fontface=newsample+1, label=taxa_ok)) + 
+  #geom_text2(aes(subset=!isTip, label=round(bootstrap, 2)), hjust=1.3, vjust=-0.8, size=3) +
+  #geom_text2(aes(subset=!isTip, label=round(posterior, 2)), hjust=1.3, vjust=-0.2, color="red", size=2) +
+  #geom_text2(aes(subset=!isTip, label=label_format(bootstrap,posterior)), hjust=1.3, vjust=-0.8, size=2.5) +
+  geom_text_repel(aes(subset=(!isTip), label=label_format(bootstrap,posterior)), 
+                  box.padding=0.1, direction="x", force=2,
+                  hjust=1.2, vjust=-0.6, segment.color="gray", size = 2.5) + 
+  geom_point2(aes(subset=(as.numeric(bootstrap) > 70 | as.numeric(posterior > 0.9))), color='gray40', size=1.5) +  
+  geom_point2(aes(subset=(bootstrap == 100 & posterior == 1)), color='black', size=1.5) +  
+  #geom_nodelab(aes(x=branch, label=round(bootstrap, 2)), vjust=-.5, size=2) + 
+  #geom_point2(aes(subset=(node == 363)), size=5, shape=23, fill="steelblue") + 
+  ggplot2::xlim(0, 0.4)
+
+```
+
+## Partial tree with node support levels annotations (BS/PP)
+ 
+```{r fig.height = 20, fig.width = 14}
+label_format_exclude = function(BS,PP,node,exclude) {
+  BS[match(exclude,node)] <- NA
+  PP[match(exclude,node)] <- NA
+  return(label_format(BS,PP))
+}
+
+pa_clip1 <- collapse(pa, node=363)
+pa_clip1 + geom_tiplab(size=3.9, aes(fontface=newsample+1, label=taxa_ok)) + 
+  #geom_text2(aes(subset=!isTip, label=round(bootstrap, 2)), hjust=1.3, vjust=-0.8, size=3) +
+  #geom_text2(aes(subset=!isTip, label=round(posterior, 2)), hjust=1.3, vjust=-0.2, color="red", size=2) +
+  #geom_text2(aes(subset=!isTip, label=label_format(bootstrap,posterior)), hjust=1.3, vjust=-0.8, size=2.5) +
+  geom_text_repel(aes(label=label_format_exclude(bootstrap,posterior,node,c(363))), 
+                  box.padding=0.1, direction="x", force=2,
+                  hjust=1.2, vjust=-0.6, segment.color="gray", size = 2.5) + 
+  geom_point2(aes(subset=(as.numeric(bootstrap) > 70 | as.numeric(posterior > 0.9))), color='black', size=1.5) +  
+  geom_point2(aes(subset=(bootstrap == 100 & posterior == 1)), color='black', size=1.5) +  
+  #geom_nodelab(aes(x=branch, label=round(bootstrap, 2)), vjust=-.5, size=2) + 
+  #geom_point2(aes(subset=(node == 363)), size=5, shape=23, fill="steelblue") + 
+  geom_point2(aes(subset=(node == 363)), size=7, shape=23, fill="lightgray") + 
+  geom_text2(aes(subset=(node == 363)), size=5, label="1") + 
+  geom_cladelabel(node=302, label="Parrisia gen. nov.", 
+                  barsize = 2, extend = 0.5, fontsize = 5.5, color="black", offset=.09) +
+  geom_cladelabel(node=327, label="Enterosora", 
+                  barsize = 2, extend = 0.5, fontsize = 5.5, color="black", offset=.1) +  
+  ggplot2::xlim(0, 0.29)
+
+```
+
