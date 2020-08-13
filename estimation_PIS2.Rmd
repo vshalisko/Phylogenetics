@@ -1,0 +1,25 @@
+---
+title: "Estimation of potentially informative sites"
+author: "Viacheslav Shalisko"
+date: "10/8/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ips)
+```
+
+
+```{r}
+my_alignment <- read.nex("_10_regsA.nex.nex")
+
+str(my_alignment)
+```
+
+```{r}
+pis(my_alignment, what = "absolute", use.ambiguities = FALSE)
+pis(my_alignment, what = "fraction", use.ambiguities = FALSE)
+pis(my_alignment, what = "index", use.ambiguities = FALSE)
+```
+
