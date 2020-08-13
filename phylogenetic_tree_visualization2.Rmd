@@ -33,30 +33,29 @@ raxml <- read.beast(raxml_file)
 
 # file format for taxa_annotations.csv
 # ========================
-#taxa,newsample,taxa_ok
-#Acrosorus_friderici_et_pauli_Parris_12793,0,Acrosorus friderici-et-pauli Parris 12793
-#Adenophorus_oahuensis_Ranker_969,0,Adenophorus oahuensis Ranker 969
-#Adenophorus_periens_Ranker_1114,0,Adenophorus periens Ranker 1114
-
+#taxa,newsample,taxa_ok,taxa_to_parse
+#Azadirachta_indica_KF986530,0,Azadirachta indica KF986530.1,italic(Azadirachta~indica)~KF986530.1
+#Entandrophragma_cylindricum_KY923074,0,Entandrophragma cylindricum KY923074.1,italic(Entandrophragma~cylindricum)~KY923074.1
+#_Cedrela_tamaulipana_Berrones_Benitez_1,1,C. tamaulipana Berrones Benites 1,italic(C.~tamaulipana~Berrones~Benites~1)~(Mexico)
+#Cedrela_odorata_CEOD_NYBG,0,C. aff. odorata NYBG accession 683/89,italic(C.)~aff.~italic(odorata)~NYBG~accession~683/89~(Mexico)
 
 taxa_annotations_file <- "taxa_annotations1.csv"
 taxa_annotations <- read.csv(taxa_annotations_file,header=TRUE)
 
 # file format for mrbayes_node_annotations.csv
 # ========================
-#node,posterior
-#270,
-#271,1
-#272,1
-#273,1
-#274,1
-#275,1
-#276,1
-#277,0.7842
-#278,
-#279,1
-#280,1
-
+#node,posterior,bootstrap
+#270,,
+#271,1,100
+#272,1,98
+#273,1,90
+#274,1,100
+#275,1,100
+#276,1,78
+#277,0.7842,55
+#278,,
+#279,1,
+#280,1,
 
 mrbayes_node_annotations_file <- "mrbayes_node_annotations.csv"
 mrbayes_node_annotations <- read.csv(mrbayes_node_annotations_file,header=TRUE)
