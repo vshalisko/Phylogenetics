@@ -1,0 +1,211 @@
+---
+title: "Ensayo Abrotanella"
+author: "Viacheslav Shalisko"
+date: "30/10/2021"
+output: html_document
+---
+
+```{r}
+#library(GenSA)    
+library(FD)      
+library(snow)     
+library(rexpokit)
+library(cladoRcpp)
+library(BioGeoBEARS)
+```
+
+
+## Cargar un arbol filogenetico
+
+```{r fig.width = 12, fig.height = 15}
+trfn <- "Abrotanella_ejericio_8_con_largo.newick"
+trfn_areas <- "Abrotanella_areas.csv"
+
+#######################################################
+# Load the tree
+# 
+# Your tree file should be Newick format. If, for 
+# some reason, you've got a NEXUS file, this will attempt to 
+# convert to Newick.
+#######################################################
+# Tree file
+try_result = try(read.tree(trfn))
+nexTF = grepl(pattern="missing value where TRUE/FALSE needed", x=try_result)
+nexTF = grepl(pattern="valor ausente donde TRUE/FALSE es necesario", x=try_result)
+if ( (length(nexTF) == 1) && (nexTF == TRUE) )
+    {
+    cat("\n\nERROR: Reading the tree file as NEXUS resulted in this error:\n\n")
+    print(try_result)
+    cat("\n...probably this means it is NEXUS rather than Newick. We will attempt to\nread it as NEXUS next, and save to Newick.")
+    try_result = try(read.nexus(trfn))
+    if (class(try_result) == "phylo")
+        {
+        cat("\n\nFile was NEXUS. Converting to Newick.\n\n")
+        new_trfn = paste0(trfn, ".newick")
+        cat(trfn, " --> ", new_trfn)
+        tr = try_result
+        write.tree(tr, file=new_trfn)
+        trfn = new_trfn
+        try_result = try(read.tree(trfn))
+        } # END if (class(try_result) == "phylo")
+    if (class(try_result) == "try-error")
+        {
+        stoptxt = "ERROR: Reading the tree failed for both read.tree() and read.nexus. Look at your file and verify the format!"
+        cat("\n\n")
+        cat(stoptxt)
+        cat("\n\n")
+        stop()
+        } else {
+        tr = try_result
+        }# END if (class(try_result) = "try-error")
+    } else {
+    # Presumably it's Newick
+    tr = try_result
+    } # END if (nexTF == TRUE)
+
+str(tr)
+names(tr)
+plot(tr)
+title("Arbol filogenetico de Abrotanella (ejercicio 8)")
+axisPhylo()
+```
+
+## Cargar datos sobre areas de distribución
+
+```{r}
+tipranges <- getranges_from_LagrangePHYLIP(lgdata_fn=trfn_areas)
+tipranges
+
+max_range_size <- 2
+
+numstates_from_numareas(numareas=4, maxareas=4, include_null_range=TRUE)
+numstates_from_numareas(numareas=4, maxareas=4, include_null_range=FALSE)
+numstates_from_numareas(numareas=4, maxareas=3, include_null_range=TRUE)
+numstates_from_numareas(numareas=4, maxareas=2, include_null_range=TRUE)
+#get states (ranges) list 
+areas = getareas_from_tipranges_object(tipranges)
+states_list_0based = rcpp_areas_list_to_states_list(areas=areas, maxareas=max_range_size, include_null_range=TRUE)
+#states_list_0based
+
+ranges_list = NULL
+for (i in 1:length(states_list_0based))
+{    
+  if ( (length(states_list_0based[[i]]) == 1) && (is.na(states_list_0based[[i]])) )
+  {
+    tmprange = "_"
+  } else {
+    tmprange = paste(areas[states_list_0based[[i]]+1], collapse="")
+  }
+  ranges_list = c(ranges_list, tmprange)
+}
+ranges_list
+length(ranges_list)
+
+exclude_ranges_1 <- c("AE","AD")
+
+# New ranges list
+new_ranges_1 <- ranges_list[-match(exclude_ranges_1, ranges_list)]
+new_ranges_1
+
+# Let's remove some non-adjacent ranges
+keep_TF = ranges_list %in% exclude_ranges_1 == FALSE
+
+states_list_0based_1 = states_list_0based[keep_TF]
+
+```
+
+## Estimar areas ancestrales
+
+```{r}
+#######################################################
+# Run DEC
+#######################################################
+
+# Intitialize a default model (DEC model)
+BioGeoBEARS_run_object <- define_BioGeoBEARS_run()
+
+# Give BioGeoBEARS the location of the phylogeny Newick file
+BioGeoBEARS_run_object$trfn <- trfn
+
+# Give BioGeoBEARS the location of the geography text file
+BioGeoBEARS_run_object$geogfn <- trfn_areas
+
+# Set the distance matrix
+BioGeoBEARS_run_object$distsfn = "distance_matrix_2.txt"
+
+# Input the maximum range size
+BioGeoBEARS_run_object$max_range_size <- max_range_size
+
+BioGeoBEARS_run_object$min_branchlength <- 0.000001    # Min to treat tip as a direct ancestor (no speciation event)
+BioGeoBEARS_run_object$include_null_range <- TRUE    # set to FALSE for e.g. DEC* model, DEC*+J, etc.
+
+BioGeoBEARS_run_object$force_sparse <- FALSE    # force_sparse=TRUE causes pathology & isn't much faster at this scale
+BioGeoBEARS_run_object <- readfiles_BioGeoBEARS_run(BioGeoBEARS_run_object)
+
+# Good default settings to get ancestral states
+BioGeoBEARS_run_object$return_condlikes_table <- TRUE
+BioGeoBEARS_run_object$calc_TTL_loglike_from_condlikes_table <- TRUE
+BioGeoBEARS_run_object$calc_ancprobs <- TRUE    # get ancestral states from optim run
+
+# Speed options and multicore processing if desired
+BioGeoBEARS_run_object$on_NaN_error <- -1e50    # returns very low lnL if parameters produce NaN error (underflow check)
+BioGeoBEARS_run_object$speedup <- TRUE          # shorcuts to speed ML search; use FALSE if worried (e.g. >3 params)
+BioGeoBEARS_run_object$use_optimx <- "GenSA"    # if FALSE, use optim() instead of optimx()
+BioGeoBEARS_run_object$num_cores_to_use <- 2
+
+BioGeoBEARS_run_object$states_list <- states_list_0based_1
+```
+
+
+```{r}
+
+# Object
+#BioGeoBEARS_run_object
+# This contains the model object
+#BioGeoBEARS_run_object$BioGeoBEARS_model_object
+
+# This table contains the parameters of the model 
+BioGeoBEARS_run_object$BioGeoBEARS_model_object@params_table
+
+# Run this to check inputs. Read the error messages if you get them!
+check_BioGeoBEARS_run(BioGeoBEARS_run_object)
+
+# For a slow analysis, run once, then set runslow=FALSE to just 
+# load the saved result.
+#bears_optim_run(BioGeoBEARS_run_object)
+
+runslow = FALSE
+resfn = "Abrotanella_DEC_run.Rdata"
+if (runslow)
+    {
+    res = bears_optim_run(BioGeoBEARS_run_object)
+    #res    
+
+    save(res, file=resfn)
+    resDEC = res
+    } else {
+    # Loads to "res"
+    load(resfn)
+    resDEC = res
+    }
+
+#resDEC
+```
+
+```{r fig.width = 8, fig.height = 8}
+results_object = resDEC
+analysis_titletxt ="BioGeoBEARS DEC de Abrotanella (ejercicio 8)"
+
+pdffn = "Abrotanells_DEC_unconstrained_v1.pdf"
+pdf(pdffn, width=6, height=6)
+scriptdir = np(system.file("extdata/a_scripts", package="BioGeoBEARS"))
+
+# States
+res2 = plot_BioGeoBEARS_results(results_object, analysis_titletxt, addl_params=list("j"), plotwhat="text", label.offset=0.45, tipcex=0.7, statecex=0.7, splitcex=0.6, titlecex=0.8, plotsplits=TRUE, include_null_range=TRUE, cornercoords_loc=scriptdir, tr=tr, tipranges=tipranges)
+
+# Pie chart
+plot_BioGeoBEARS_results(results_object, analysis_titletxt, addl_params=list("j"), plotwhat="pie", label.offset=0.45, tipcex=0.7, statecex=0.7, splitcex=0.6, titlecex=0.8, plotsplits=TRUE, include_null_range=TRUE, cornercoords_loc=scriptdir, tr=tr, tipranges=tipranges)
+```
+
+
+

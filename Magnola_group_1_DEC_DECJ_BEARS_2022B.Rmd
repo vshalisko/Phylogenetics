@@ -1,0 +1,361 @@
+---
+title: "Magnolia in Central America Grupo 2"
+author: "Viacheslav Shalisko"
+date: "10/6/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(GenSA)    # GenSA is better than optimx (although somewhat slower)
+library(FD)       # for FD::maxent() (make sure this is up-to-date)
+library(snow)     # (if you want to use multicore functionality; some systems/R versions prefer library(parallel), try either)
+#library(parallel)
+library(rexpokit)
+library(cladoRcpp)
+library(BioGeoBEARS)
+```
+
+```{r}
+trfn = "TimeTree_original.tre.newick"
+
+include_species_1 <- c(
+  "Magnolia_montebelloensis*",
+  "Magnolia_grandiflora",
+  "Magnolia_virginiana",
+  "Magnolia_tamaulipana*",
+  "Magnolia_sharpii*",
+  "Magnolia_krusei*",
+  "Magnolia_schiedeana",
+  "Magnolia_panamensis",
+  "Magnolia_vazquezii*",
+  "Magnolia_pacifica",
+  "Magnolia_iltisiana",
+  "Magnolia_yoroconte",
+  "Magnolia_iltisiana*",
+  "Magnolia_guatemalensis",
+  "Magnolia_dealbata",
+  "Magnolia_rzedowskiana*",
+  "Magnolia_macrophylla",
+  "Magnolia_calophillum*")
+
+include_species_2 <- c(
+  "Magnolia_mahechae",
+  "Magnolia_lenticellatum",
+  "Magnolia_portoricensis",
+  "Magnolia_splendens",
+  "Magnolia_splendens1",
+  "Magnolia_minor",
+  "Magnolia_brasilensis*",
+  "Magnolia_sinacacolini*",
+  "Magnolia_heribertoi*",
+  "Magnolia_calimaensis*",
+  "Magnolia_caricifragrans",
+  "Magnolia_incana*",
+  "Magnolia_dodecapetala",
+  "Magnolia_dodecapetala1",
+  "Magnolia_mexicana*",
+  "Magnolia_mexicana**",
+  "Magnolia_mexicana",
+  "Magnolia_mexicana1"
+)
+
+getwd()
+list.files(getwd())
+```
+
+```{r}
+
+
+#######################################################
+# Load the tree
+# 
+# Your tree file should be Newick format. If, for 
+# some reason, you've got a NEXUS file, this will attempt to 
+# convert to Newick.
+#######################################################
+# Tree file
+try_result = try(read.tree(trfn))
+nexTF = grepl(pattern="missing value where TRUE/FALSE needed", x=try_result)
+nexTF = grepl(pattern="valor ausente donde TRUE/FALSE es necesario", x=try_result)
+if ( (length(nexTF) == 1) && (nexTF == TRUE) )
+    {
+    cat("\n\nERROR: Reading the tree file as NEXUS resulted in this error:\n\n")
+    print(try_result)
+    cat("\n...probably this means it is NEXUS rather than Newick. We will attempt to\nread it as NEXUS next, and save to Newick.")
+    try_result = try(read.nexus(trfn))
+    if (class(try_result) == "phylo")
+        {
+        cat("\n\nFile was NEXUS. Converting to Newick.\n\n")
+        new_trfn = paste0(trfn, ".newick")
+        cat(trfn, " --> ", new_trfn)
+        tr = try_result
+        write.tree(tr, file=new_trfn)
+        trfn = new_trfn
+        try_result = try(read.tree(trfn))
+        } # END if (class(try_result) == "phylo")
+    if (class(try_result) == "try-error")
+        {
+        stoptxt = "ERROR: Reading the tree failed for both read.tree() and read.nexus. Look at your file and verify the format!"
+        cat("\n\n")
+        cat(stoptxt)
+        cat("\n\n")
+        stop()
+        } else {
+        tr = try_result
+        }# END if (class(try_result) = "try-error")
+    } else {
+    # Presumably it's Newick
+    tr = try_result
+    } # END if (nexTF == TRUE)
+
+```
+
+
+```{r fig.width = 12, fig.height = 15}
+str(tr)
+names(tr)
+plot(tr)
+title("Magnolia tree (de Castro Arce, 2019)")
+axisPhylo()
+
+#tr$edge
+
+#write.table(tr$tip.label, file = "Magnolia_taxa_list.csv", quote = FALSE, sep = " ", row.names = FALSE)
+
+
+```
+
+```{r fig.width = 12, fig.height = 6}
+exclude_species_1 <- tr$tip.label[-match(include_species_1, tr$tip.label)]
+pruned_tree_1 <- drop.tip(tr,exclude_species_1)
+plot(pruned_tree_1)
+axisPhylo()
+
+pruned_tree_1$tip.label
+write.table(pruned_tree_1$tip.label, file = "Magnolia_taxa_1_list.csv", 
+            quote = FALSE, sep = " ", row.names = FALSE)
+write.tree(pruned_tree_1, file = "Magnolia_tree_1.tre")
+
+exclude_species_2 <- tr$tip.label[-match(include_species_2, tr$tip.label)]
+pruned_tree_2 <- drop.tip(tr,exclude_species_2)
+plot(pruned_tree_2)
+axisPhylo()
+
+pruned_tree_2$tip.label
+write.table(pruned_tree_2$tip.label, file = "Magnolia_taxa_2_list.csv", 
+            quote = FALSE, sep = " ", row.names = FALSE)
+```
+
+```{r}
+#moref("Magnolia_taxa_1_areas.csv")
+tipranges <- getranges_from_LagrangePHYLIP(lgdata_fn="Magnolia_taxa_1_areas.csv")
+tipranges
+
+max_range_size <- 2
+
+numstates_from_numareas(numareas=4, maxareas=4, include_null_range=TRUE)
+numstates_from_numareas(numareas=4, maxareas=4, include_null_range=FALSE)
+numstates_from_numareas(numareas=4, maxareas=3, include_null_range=TRUE)
+numstates_from_numareas(numareas=4, maxareas=2, include_null_range=TRUE)
+
+
+#get states (ranges) list 
+areas = getareas_from_tipranges_object(tipranges)
+states_list_0based = rcpp_areas_list_to_states_list(areas=areas, maxareas=max_range_size, include_null_range=TRUE)
+#states_list_0based
+
+ranges_list = NULL
+for (i in 1:length(states_list_0based))
+{    
+  if ( (length(states_list_0based[[i]]) == 1) && (is.na(states_list_0based[[i]])) )
+  {
+    tmprange = "_"
+  } else {
+    tmprange = paste(areas[states_list_0based[[i]]+1], collapse="")
+  }
+  ranges_list = c(ranges_list, tmprange)
+}
+ranges_list
+length(ranges_list)
+
+#exclude_ranges_1 <- c("C6H8", "C6I8", "G7H4")
+exclude_ranges_1 <- c("C6H8")
+
+# New ranges list
+new_ranges_1 <- ranges_list[-match(exclude_ranges_1, ranges_list)]
+new_ranges_1
+
+# Let's remove some non-adjacent ranges
+keep_TF = ranges_list %in% exclude_ranges_1 == FALSE
+
+states_list_0based_1 = states_list_0based[keep_TF]
+
+
+
+```
+
+```{r}
+#######################################################
+# Run DEC
+#######################################################
+
+# Intitialize a default model (DEC model)
+BioGeoBEARS_run_object <- define_BioGeoBEARS_run()
+
+# Give BioGeoBEARS the location of the phylogeny Newick file
+BioGeoBEARS_run_object$trfn <- "Magnolia_tree_1.tre"
+
+# Give BioGeoBEARS the location of the geography text file
+BioGeoBEARS_run_object$geogfn <- "Magnolia_taxa_1_areas.csv"
+
+# Set the distance matrix
+BioGeoBEARS_run_object$distsfn = "distance_matrix_1.txt"
+
+#BioGeoBEARS_run_object$timesfn = "timeperiods.txt"
+
+# 3. Set the parameter d (rate of range-expansion dispersal) to be fixed to 0.03
+#BioGeoBEARS_run_object$BioGeoBEARS_model_object@params_table["d","type"] = "fixed"
+#BioGeoBEARS_run_object$BioGeoBEARS_model_object@params_table["d","init"] = 0.03
+#BioGeoBEARS_run_object$BioGeoBEARS_model_object@params_table["d","est"] = 0.03
+
+# Input the maximum range size
+BioGeoBEARS_run_object$max_range_size <- max_range_size
+
+BioGeoBEARS_run_object$min_branchlength <- 0.000001    # Min to treat tip as a direct ancestor (no speciation event)
+BioGeoBEARS_run_object$include_null_range <- TRUE    # set to FALSE for e.g. DEC* model, DEC*+J, etc.
+
+BioGeoBEARS_run_object$force_sparse <- FALSE    # force_sparse=TRUE causes pathology & isn't much faster at this scale
+BioGeoBEARS_run_object <- readfiles_BioGeoBEARS_run(BioGeoBEARS_run_object)
+
+# Good default settings to get ancestral states
+BioGeoBEARS_run_object$return_condlikes_table <- TRUE
+BioGeoBEARS_run_object$calc_TTL_loglike_from_condlikes_table <- TRUE
+BioGeoBEARS_run_object$calc_ancprobs <- TRUE    # get ancestral states from optim run
+
+# Speed options and multicore processing if desired
+BioGeoBEARS_run_object$on_NaN_error <- -1e50    # returns very low lnL if parameters produce NaN error (underflow check)
+BioGeoBEARS_run_object$speedup <- TRUE          # shorcuts to speed ML search; use FALSE if worried (e.g. >3 params)
+BioGeoBEARS_run_object$use_optimx <- "GenSA"    # if FALSE, use optim() instead of optimx()
+BioGeoBEARS_run_object$num_cores_to_use <- 2
+
+
+
+
+BioGeoBEARS_run_object$states_list <- states_list_0based_1
+
+
+```
+
+
+```{r}
+
+# Object
+BioGeoBEARS_run_object
+# This contains the model object
+BioGeoBEARS_run_object$BioGeoBEARS_model_object
+
+# This table contains the parameters of the model 
+BioGeoBEARS_run_object$BioGeoBEARS_model_object@params_table
+
+# Run this to check inputs. Read the error messages if you get them!
+check_BioGeoBEARS_run(BioGeoBEARS_run_object)
+
+# For a slow analysis, run once, then set runslow=FALSE to just 
+# load the saved result.
+#bears_optim_run(BioGeoBEARS_run_object)
+
+runslow = TRUE
+resfn = "Magnolia_taxa_1_DEC_run.Rdata"
+if (runslow)
+    {
+    res = bears_optim_run(BioGeoBEARS_run_object)
+    res    
+
+    save(res, file=resfn)
+    resDEC = res
+    } else {
+    # Loads to "res"
+    load(resfn)
+    resDEC = res
+    }
+
+resDEC
+```
+
+
+
+```{r fig.width = 8, fig.height = 8}
+results_object = resDEC
+analysis_titletxt ="BioGeoBEARS DEC on Magnolia subset 1"
+
+pdffn = "Magnolia_DEC_M0_unconstrained_v1.pdf"
+pdf(pdffn, width=6, height=6)
+scriptdir = np(system.file("extdata/a_scripts", package="BioGeoBEARS"))
+
+# States
+res2 = plot_BioGeoBEARS_results(results_object, analysis_titletxt, addl_params=list("j"), plotwhat="text", label.offset=0.45, tipcex=0.7, statecex=0.7, splitcex=0.6, titlecex=0.8, plotsplits=TRUE, include_null_range=TRUE, cornercoords_loc=scriptdir, tr=pruned_tree_1, tipranges=tipranges)
+
+# Pie chart
+plot_BioGeoBEARS_results(results_object, analysis_titletxt, addl_params=list("j"), plotwhat="pie", label.offset=0.45, tipcex=0.7, statecex=0.7, splitcex=0.6, titlecex=0.8, plotsplits=TRUE, include_null_range=TRUE, cornercoords_loc=scriptdir, tr=pruned_tree_1, tipranges=tipranges)
+```
+
+
+```{r}
+# Set up DEC+J model
+# Get the ML parameter values from the 2-parameter nested model
+# (this will ensure that the 3-parameter model always does at least as good)
+dstart = resDEC$outputs@params_table["d","est"]
+estart = resDEC$outputs@params_table["e","est"]
+jstart = 0.0001
+
+# Input starting values for d, e
+BioGeoBEARS_run_object$BioGeoBEARS_model_object@params_table["d","init"] = dstart
+BioGeoBEARS_run_object$BioGeoBEARS_model_object@params_table["d","est"] = dstart
+BioGeoBEARS_run_object$BioGeoBEARS_model_object@params_table["e","init"] = estart
+BioGeoBEARS_run_object$BioGeoBEARS_model_object@params_table["e","est"] = estart
+
+# Add j as a free parameter
+BioGeoBEARS_run_object$BioGeoBEARS_model_object@params_table["j","type"] = "free"
+BioGeoBEARS_run_object$BioGeoBEARS_model_object@params_table["j","init"] = jstart
+BioGeoBEARS_run_object$BioGeoBEARS_model_object@params_table["j","est"] = jstart
+
+check_BioGeoBEARS_run(BioGeoBEARS_run_object)
+
+
+resfn = "Magnolia_taxa_1_DECJ_run1.Rdata"
+runslow = TRUE
+if (runslow)
+    {
+    #sourceall("/Dropbox/_njm/__packages/BioGeoBEARS_setup/")
+
+    res = bears_optim_run(BioGeoBEARS_run_object)
+    res    
+
+    save(res, file=resfn)
+
+    resDECj = res
+    } else {
+    # Loads to "res"
+    load(resfn)
+    resDECj = res
+    }
+
+
+
+```
+
+
+```{r fig.width = 8, fig.height = 8}
+results_object = resDECj
+analysis_titletxt ="BioGeoBEARS DEC+J on Magnolia subset 1"
+
+pdffn = "Magnolia_DECJ_M0_unconstrained_v1.pdf"
+pdf(pdffn, width=6, height=6)
+scriptdir = np(system.file("extdata/a_scripts", package="BioGeoBEARS"))
+
+# States
+res2 = plot_BioGeoBEARS_results(results_object, analysis_titletxt, addl_params=list("j"), plotwhat="text", label.offset=0.45, tipcex=0.7, statecex=0.7, splitcex=0.6, titlecex=0.8, plotsplits=TRUE, include_null_range=TRUE, cornercoords_loc=scriptdir, tr=pruned_tree_1, tipranges=tipranges)
+
+# Pie chart
+plot_BioGeoBEARS_results(results_object, analysis_titletxt, addl_params=list("j"), plotwhat="pie", label.offset=0.45, tipcex=0.7, statecex=0.7, splitcex=0.6, titlecex=0.8, plotsplits=TRUE, include_null_range=TRUE, cornercoords_loc=scriptdir, tr=pruned_tree_1, tipranges=tipranges)
+```
