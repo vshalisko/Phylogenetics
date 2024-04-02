@@ -1,0 +1,337 @@
+---
+title: "Phylogenetic tree visualization with biogeography"
+author: "Viacheslav Shalisko"
+date: "April 2024"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("treeio")
+library("ggtree")
+library("ggrepel")
+library("ggimage")
+library("deeptime")
+
+fontfaces = c("plain", "bold", "italic", "bold.italic")
+```
+
+
+
+```{r}
+# read AGED tree file
+age_file <- "BEAST_annotated_target_tree.tre.txt"
+age <- read.beast(age_file)
+
+# file format for Cedrela_terminals_annotations.csv
+# ========================
+#taxa,newsample,taxa_ok,taxa_to_parse
+#Azadirachta_indica_KF986530,0,Azadirachta indica KF986530.1,italic(Azadirachta~indica)~KF986530.1
+#Entandrophragma_cylindricum_KY923074,0,Entandrophragma cylindricum KY923074.1,italic(Entandrophragma~cylindricum)~KY923074.1
+#_Cedrela_tamaulipana_Berrones_Benitez_1,1,C. tamaulipana Berrones Benites 1,italic(C.~tamaulipana~Berrones~Benites~1)~(Mexico)
+#Cedrela_odorata_CEOD_NYBG,0,C. aff. odorata NYBG accession 683/89,italic(C.)~aff.~italic(odorata)~NYBG~accession~683/89~(Mexico)
+
+taxa_annotations_file <- "Cedrela_terminals_annotations.csv"
+taxa_annotations <- read.csv(taxa_annotations_file,header=TRUE)
+head(taxa_annotations)
+
+# file format for Cedrela_node_support_geography.csv
+# ========================
+#node,posterior,bootstrap,distribution
+#270,,,ABF
+#271,1,100,A
+#272,1,98,A
+#273,1,90,B
+#274,1,100,A
+#275,1,100,DF
+#276,1,78,AB
+#277,0.7842,55,A
+#278,,,A
+#279,1,,A
+#280,1,,A
+
+mrbayes_node_annotations_file <- "Cedrela_node_support.csv"
+mrbayes_node_annotations <- read.csv(mrbayes_node_annotations_file,header=TRUE)
+
+## read CSV table with area probabilities by node number
+geo_file <- "Cedrela_SDIVA_node_geography.csv"
+geo <- read.csv(geo_file)
+
+```
+
+```{r}
+clade_format = function(nn) {
+  AN <- rep(NA, length(nn))
+  nn <- as.numeric(nn)
+  AN[nn == 35] <- "Clade B"
+  AN[nn == 50] <- "Clade A"
+  AN
+}
+
+p_age_a <- ggtree(age, aes(x, y)) + geom_tree() + theme_tree()
+## for some unknown reason there are no data$label, but data$label.x
+#p_age_a$data$label <- p_age_a$data$label.x
+p_age_a$data$label
+p_age_a <- p_age_a %<+% taxa_annotations  
+p_age_a <- p_age_a %<+% mrbayes_node_annotations
+```
+
+
+## Colors
+
+```{r}
+## sequence: A,   AB,   ABC,  AC, 
+##           B,     BC, 
+##           BCD, BD, C, CD, CDE, 
+##           CDF, CE, CEF, CF, D, 
+##           DE, DEF, DF, E, EF, F
+
+my_codes <- c("A","AB","ABC","ABD","ACD","AD",
+              "B","BCD","BCE","BD","BDE","BE",
+              "C","CD","CDE","CE",
+              "D","DE","DEF","DF","E","EF","F")
+
+# my_col <- c("blue",  "cadetblue",  "lightblue",  "cyan",  "navy",
+#             "blueviolet","aquamarine","cyan3","darkblue","blue4",
+#             "blue3","darkcyan","cadetblue2","tan","gray",
+#             "violet","purple","khaki","darkred","darkgreen",
+#             "palegreen","beige","yellow","orange","pink","red")
+
+my_col <- c("#277ac5",  "cadetblue",  "lightblue","blueviolet", "purple","beige",
+            "#003181","blue3","darkgray","pink","cadetblue2","#808000",
+            "#7cd8e6","cyan","aquamarine","khaki",
+            "#3a9000","palegreen","tan","yellow","#ffa500","#aa3700","#ff0000")
+
+
+
+
+
+## produce color list for nodes and make tables with only required columns
+print("Selector of only used areas and colors (for legend)")
+
+str(geo)
+used_areas <- apply(geo, 2, sum)
+used_areas <- used_areas[2:length(used_areas)]
+used_areas_names <- names(used_areas)
+used_areas_names <- used_areas_names[used_areas > 0]
+#used_areas_names <- c(used_areas_names, "ABC", "B", "C")
+used_areas_names <- sort(used_areas_names)
+used_areas_names
+
+tip_distributions_vector <- sort(unique(p_age_a$data$tip_distribution))
+short_distributions_vector <- sort(unique(c(tip_distributions_vector,p_age_a$data$distribution)))
+distributions_vector <- sort(unique(c(used_areas_names, tip_distributions_vector)))
+
+## produce full color list for internal nodes
+print("Color sequence for internal nodes, the full one")
+distributions_vector_index <- match(distributions_vector, my_codes)
+my_codes[distributions_vector_index]
+my_node_color <- my_col[distributions_vector_index]
+my_node_color
+
+## produce short color list for internal nodes
+print("Color sequence for internal nodes, the full one")
+short_distributions_vector_index <- match(short_distributions_vector, my_codes)
+my_codes[short_distributions_vector_index]
+short_my_node_color <- my_col[short_distributions_vector_index]
+short_my_node_color
+
+## produce color list for tips
+print("Color secuence for tips")
+tip_distributions_vector_index <- match(tip_distributions_vector, my_codes)
+my_codes[tip_distributions_vector_index]
+my_tipcolor <- my_col[tip_distributions_vector_index]
+my_tipcolor
+
+geo2 <- geo[,which(names(geo) %in% c("node",used_areas_names))]
+str(geo2)
+
+unused_distributions <- distributions_vector[! distributions_vector %in% tip_distributions_vector]
+unused_distributions_index <- match(unused_distributions, my_codes)
+my_codes[unused_distributions_index]
+unused_distributions_colors <- my_col[unused_distributions_index]
+unused_distributions_colors
+
+used_areas_vector_index <- match(used_areas_names, my_codes)
+my_used_areas_colors <- my_col[used_areas_vector_index]
+my_used_areas_colors
+
+## reduced legend 
+my_legend_data2 <- data.frame(a = rep(1, length(unused_distributions)),
+                             b = seq(1, length(unused_distributions), 1),
+                             color = unused_distributions,
+                             code = unused_distributions)
+
+
+## full legend
+#my_legend_data <- data.frame(a = rep(1, length(my_codes)),
+#                             b = seq(1, length(my_codes), 1),
+#                             color = my_col,
+#                             code = my_codes)
+
+
+```
+
+## Time calibrated tree with node numbers
+
+```{r fig.height = 10, fig.width = 10, dpi = 600}
+
+## grafica 1
+## grafica principal
+
+## Tip labels (new tree copy)
+p_age <- p_age_a + 
+  geom_text2(aes(subset=isTip, label = tip_distribution), 
+             size = 3.5, hjust = 0, nudge_x = 2) +
+  geom_text(size = 3.5, hjust = 0, nudge_x = 8,
+               parse = TRUE,
+               mapping = aes(fontface=fontfaces[newsample+1], label=taxa_to_parse))
+
+## Tip circles
+p_age <- p_age + geom_tippoint(aes(color = tip_distribution), 
+                               show.legend = TRUE, size = 5) +
+                               #scale_colour_manual(values = c(my_tipcolor, my_used_areas_colors))
+                               scale_colour_manual(values = my_node_color)
+p_age <- p_age + geom_tippoint(size = 5, color="black", shape = 21)
+
+## Node pies charts
+pies <- nodepie(geo2, cols = 2:ncol(geo2))
+#str(pies)
+#pies <- lapply(pies, function(g) g + scale_fill_manual(values = my_col))
+pies <- lapply(pies, function(g) g + scale_fill_manual(values = my_used_areas_colors))
+
+p_age_pie <- p_age + geom_inset(pies, width = .10, height = .10, hjust = .3, vjust = .06)
+p_age_pie <- p_age_pie + geom_nodepoint(size = 12, color="black", shape = 21)
+p_age_pie <- p_age_pie + geom_nodepoint(size = 5, fill = "white", color="black", shape = 21)
+
+## Node labels
+#p_age <- p_age + geom_text2(aes(subset=!isTip, label=node), hjust=-.3, color="red", size=3)
+p_age_pie <- p_age_pie + geom_text2(aes(subset=!isTip, label = distribution),
+                            hjust=.4, vjust=.4, size=2.2)
+
+p_age_pie <- p_age_pie + geom_text_repel(aes(
+                   label=clade_format(node)),
+                   box.padding=0.12, direction="x", force=2, min.segment.length = 2,
+                   hjust=1.3, vjust=1.3, segment.color="gray", size = 4)
+
+## the experimental reduced legend that seems to work just fine
+  p_age_pie <- p_age_pie + geom_point(data = my_legend_data2,
+                                      mapping = aes(x = a - 20, y = Ntip(age) - b,
+                                                    color = color),
+                                      shape = 19, size = 5, show.legend = TRUE)
+#p_age_pie <- p_age_pie + scale_colour_manual(values = my_node_color)
+p_age_pie <- p_age_pie + guides(col = guide_legend(ncol = 2))
+
+## Final adjustments
+p_age_pie <- p_age_pie + labs(color = "Area codes")
+p_age_pie <- p_age_pie + theme(legend.position = c(.05, .85)) + ggplot2::xlim(0, 145)
+p_age_pie
+
+```
+
+## Time calibrated tree with node ages and age confidence intervals
+
+```{r fig.height = 10, fig.width = 10, dpi = 300}
+## grafica 2
+## grafica complementario con enumeración de nodos y barras
+
+p_age_d <- ggtree(age, aes(x, y)) + geom_tree() + theme_tree()
+p_age_d <- p_age_d %<+% taxa_annotations  
+p_age_d <- p_age_d %<+% mrbayes_node_annotations
+p_age_d <- revts(p_age_d)
+
+## Tip labels
+p_age_d <- p_age_d + geom_text(size = 3.5, hjust = 0, nudge_x = 2,
+               parse = TRUE,
+               mapping = aes(fontface=fontfaces[newsample+1], label=taxa_to_parse
+                                           ))
+p_age_d <- p_age_d + geom_text2(aes(subset=!isTip, label=round(height,1)), vjust=-.6, hjust=1.6, 
+                            color="black", size=2)
+
+p_age_d <- p_age_d + geom_range("height_0.95_HPD", color='red', size=2, alpha=.5)
+p_age_d <- p_age_d + theme_tree2(legend.position = c(.05, .85))  
+p_age_d <- p_age_d + ggplot2::scale_x_continuous(breaks = c(-120, 0), labels = c("100 Ma", "0 Ma"))
+p_age_d <- p_age_d + ggplot2::xlim(-120, 70)
+
+p_age_d
+```
+
+
+## Only most probable areas for ancestral nodes
+
+```{r fig.height = 10, fig.width = 10, dpi = 300}
+## grafica 3
+## grafica complementario
+p_age_c <- ggtree(age, aes(x, y)) + geom_tree() + theme_tree()
+p_age_c <- p_age_c %<+% taxa_annotations  
+p_age_c <- p_age_c %<+% mrbayes_node_annotations
+p_age_c <- revts(p_age_c)
+
+## Tip labels
+p_age_c <- p_age_c + geom_text(size = 3.5, hjust = 0, nudge_x = 2,
+               parse = TRUE,
+               mapping = aes(fontface=fontfaces[newsample+1], label=taxa_to_parse))
+## Tip circles
+p_age_c <- p_age_c + geom_tippoint(aes(color = tip_distribution), 
+                               show.legend = TRUE, size = 5) 
+p_age_c <- p_age_c + geom_tippoint(size = 5, color="black", shape = 21)
+
+p_age_c <- p_age_c + geom_text2(aes(subset=!isTip, label=node), hjust=-1.3,
+                            color="red", size=2)
+p_age_c <- p_age_c + geom_text2(aes(subset=!isTip, label = distribution),
+                            hjust=1.5, vjust=-1.5, size=2.2)
+p_age_c <- p_age_c + geom_nodepoint(aes(subset=!isTip, color = distribution),
+                               show.legend = TRUE, size = 5) +
+                               scale_colour_manual(values = short_my_node_color)
+p_age_c <- p_age_c + geom_nodepoint(aes(subset=!isTip), size = 5,
+                               color="black", shape = 21)
+#p_age_c <- p_age_c + scale_x_continuous(breaks=seq(-80,0,20), labels = abs)
+p_age_c <- p_age_c + labs(x = "Age (Ma)", color = "Area codes")
+p_age_c <- p_age_c + theme_tree2(legend.position = c(.05, .85)) + ggplot2::xlim(-80, 65)
+
+p_age_c
+
+
+```
+
+## Only most probable areas for ancestral nodes with geochronological scale
+
+```{r fig.height = 10, fig.width = 10, dpi = 600}
+# ## grafica 4
+p_age_inverse <- ggtree(age, aes(x, y)) + geom_tree() + theme_tree()
+p_age_inverse <- p_age_inverse %<+% taxa_annotations  
+p_age_inverse <- p_age_inverse %<+% mrbayes_node_annotations
+p_age_inverse <- revts(p_age_inverse)
+
+## Tip labels
+p_age_inverse <- p_age_inverse + geom_text(size = 3.5, hjust = 0, nudge_x = 2,
+               parse = TRUE,
+               mapping = aes(fontface=fontfaces[newsample+1], label=taxa_to_parse))
+## Tip circles
+p_age_inverse <- p_age_inverse + geom_tippoint(aes(color = tip_distribution), 
+                               show.legend = TRUE, size = 5) 
+p_age_inverse <- p_age_inverse + geom_tippoint(size = 5, color="black", shape = 21)
+p_age_inverse <- p_age_inverse + geom_nodepoint(aes(subset=!isTip, color = distribution),
+                               show.legend = TRUE, size = 5) +
+                               scale_colour_manual(values = short_my_node_color)
+p_age_inverse <- p_age_inverse + geom_nodepoint(size = 5, color="black", shape = 21)
+
+## Node labels
+p_age_inverse <- p_age_inverse + geom_text2(aes(subset=!isTip, label = distribution),
+                            hjust=1.5, vjust=-1.5, size=2.2)
+
+## Time scale
+p_age_inverse <- p_age_inverse + coord_geo(dat = "epochs",
+                                   xlim = c(-83,65), ylim = c(-1,Ntip(age)+1),
+                          neg = TRUE, abbrv = TRUE, size = "auto")
+## Final adjustments
+p_age_inverse <- p_age_inverse + labs(color = "Area codes", x = "Age (Ma)")
+p_age_inverse <- p_age_inverse + theme_tree2(legend.position = c(.05, .75)) 
+#                  + ggplot2::xlim(-85, 65) + ggplot2::ylim(-2,Ntip(age)+2)
+
+p_age_inverse
+
+```

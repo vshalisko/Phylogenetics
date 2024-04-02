@@ -1,0 +1,237 @@
+---
+title: "Cedrela phylogeny visualization"
+author: "Viacheslav Shalisko"
+date: "June 2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("treeio")
+library("ggtree")
+library("ggrepel")
+library("deeptime")
+
+fontfaces = c("plain", "bold", "italic", "bold.italic")
+```
+
+```{r}
+# read NEXUS file (phylogeny)
+raxml_file <- "10_regions_NEW2 - Posterior output.nex"
+raxml <- read.beast(raxml_file)
+
+# read time calibrated tree file
+age_file <- "BEAST_annotated_target_tree.tre.txt"
+age <- read.beast(age_file)
+
+# file format for Cedrela_terminals_annotations.csv
+# ========================
+#taxa,newsample,taxa_ok,taxa_to_parse
+#Azadirachta_indica_KF986530,0,Azadirachta indica KF986530.1,italic(Azadirachta~indica)~KF986530.1
+#Entandrophragma_cylindricum_KY923074,0,Entandrophragma cylindricum KY923074.1,italic(Entandrophragma~cylindricum)~KY923074.1
+#_Cedrela_tamaulipana_Berrones_Benitez_1,1,C. tamaulipana Berrones Benites 1,italic(C.~tamaulipana~Berrones~Benites~1)~(Mexico)
+#Cedrela_odorata_CEOD_NYBG,0,C. aff. odorata NYBG accession 683/89,italic(C.)~aff.~italic(odorata)~NYBG~accession~683/89~(Mexico)
+
+taxa_annotations_file <- "Cedrela_terminals_annotations.csv"
+taxa_annotations <- read.csv(taxa_annotations_file,header=TRUE)
+head(taxa_annotations)
+
+# file format for Cedrela_node_support.csv
+# ========================
+#node,posterior,bootstrap
+#270,,
+#271,1,100
+#272,1,98
+#273,1,90
+#274,1,100
+#275,1,100
+#276,1,78
+#277,0.7842,55
+#278,,
+#279,1,
+#280,1,
+
+mrbayes_node_annotations_file <- "Cedrela_node_support.csv"
+mrbayes_node_annotations <- read.csv(mrbayes_node_annotations_file,header=TRUE)
+
+```
+
+## Full tree with node numbers
+
+```{r fig.height = 12, fig.width = 10}
+
+
+p <- ggtree(raxml, aes(x, y)) + geom_tree() + theme_tree()
+p <- p + geom_treescale(offset = -1, x=0, y=-1, width=0.01)
+p <- p 
+
+
+ pb <- p %<+% taxa_annotations
+ pa <- pb %<+% mrbayes_node_annotations
+ 
+ 
+number_format <- function (nn, it) {
+  nn[it] <- ""
+  nn
+}
+
+# display tree with node numbers
+p_nodenumbers <- pa + geom_text(size = 3.5, hjust = 0, nudge_x = 0.001,
+               parse = TRUE,
+               mapping = aes(fontface=fontfaces[newsample+1], label=taxa_to_parse
+              )) 
+
+p_nodenumbers <- p_nodenumbers + 
+      geom_text_repel(mapping=aes(label=number_format(node, isTip)), 
+                   box.padding=0.12, direction="x", force=2, color="red",
+                   hjust=1.2, vjust=-1.6, segment.color="pink", size = 2.5) + 
+      #geom_text2(aes(subset=!isTip, label=node), hjust=-.3, color="red", size=3) + 
+      geom_nodepoint(color='red')
+
+p_nodenumbers + ggplot2::xlim(0, 0.1)
+```
+
+## Full tree with node support levels annotations (BS/PP)
+Note: outgroup branch length reduced for visualization
+
+```{r fig.height = 10, fig.width = 10}
+# modify outgroup length (reduciong for visualization)
+pa$data[pa$data$node %in% c(1), "x"] = 0.03
+
+
+label_format = function(BS,PP) {
+
+  BS <- round(BS, 2)
+  PP <- round(PP, 2)
+
+  BS[is.na(BS)] <- "-"
+  PP[is.na(PP)] <- "-"
+
+  AN <- paste(PP,BS,sep="/")
+  AN[AN == "-/-"] <- ""
+  #AN[AN == "100/1"] <- "*"
+  AN
+}
+
+pa + 
+   geom_text(size = 3.5, hjust = 0, nudge_x = 0.001,
+               parse = TRUE,
+               mapping = aes(fontface=fontfaces[newsample+1], label=taxa_to_parse)) +  
+   geom_text2(aes(subset=!isTip, label=label_format(bootstrap,posterior)), 
+            hjust=1.3, vjust=-0.8, size=2.2) +  
+   ggplot2::xlim(0, 0.039)
+```
+
+## Full tree with node support levels annotations (BS/PP)
+### use of ggrepel library
+
+```{r fig.height = 10, fig.width = 10}
+
+clade_format = function(nn) {
+  AN <- rep(NA, length(nn))
+  nn <- as.numeric(nn)
+  AN[nn == 35] <- "Clade B"
+  AN[nn == 50] <- "Clade A"
+  AN
+}
+
+line_cut = function(nn) {
+  CL <- rep(NA, length(nn))
+  nn <- as.numeric(nn)
+  CL[nn == 1] <- "//"
+  CL
+}
+
+ pa + 
+   geom_text(size = 3.5, hjust = 0, nudge_x = 0.001,
+               parse = TRUE,
+               mapping = aes(fontface=fontfaces[newsample+1], label=taxa_to_parse
+                                           ))  +
+   geom_point2(size = 6, colour = "white", 
+               mapping = aes(subset=(node == 1), x = 0.01))  +
+   geom_text(size = 6, colour = "black",
+               mapping = aes(label=line_cut(node), x = 0.01))  +
+   geom_text_repel(aes(
+                   #subset=(!isTip), 
+                   label=label_format(bootstrap,posterior)), 
+                   box.padding=0.05, point.padding=0.35, nudge_x = -0.0001, nudge_y = 0.01,
+                   direction="both", force=1, inherit.aes = TRUE,
+                   hjust=1.1, vjust=-0.6, segment.color="gray", size = 2.5) + 
+   geom_text_repel(aes(
+                   label=clade_format(node)), 
+                   box.padding=0.12, direction="x", force=2,
+                   hjust=1.1, vjust=1.3, segment.color="gray", size = 4) + 
+   #geom_point2(aes(subset=(as.numeric(bootstrap) > 50 & as.numeric(posterior > 0.8))), color='gray40', size=1.5) +  
+   geom_point2(aes(subset=(as.numeric(posterior) > 0.9)), color='black', size=1.5) +
+   #geom_point2(aes(subset=(bootstrap == 100 & posterior == 1)), color='black', size=1.5) +  
+   ggplot2::xlim(0, 0.04)
+
+```
+
+```{r}
+p_age_a <- ggtree(age, aes(x, y)) + geom_tree() + theme_tree()
+
+#str(p_age_a$data)
+
+p_age_a$data$label
+p_age_a <- p_age_a %<+% taxa_annotations
+
+p_age_a$data
+```
+
+## Time calibrated tree with mean mrca age and confidence intervals
+
+```{r fig.height = 10, fig.width = 10, dpi = 300}
+# la grafica complementaria con edad promedio y barras de CI
+p_age_r <- revts(p_age_a)
+p_age_d <- p_age_r + geom_text(size = 3.5, hjust = 0, nudge_x = 2,
+               parse = TRUE,
+               mapping = aes(fontface=fontfaces[newsample+1], label=taxa_to_parse
+                                           ))
+p_age_d <- p_age_d + geom_text2(aes(subset=!isTip, label=round(height,1)),
+                                    vjust=-.6, hjust=1.3,
+                            color="black", size=2)
+
+p_age_d <- p_age_d + geom_range("height_0.95_HPD", color='red', size=2, alpha=.5)
+
+
+p_age_d <- p_age_d + coord_cartesian(clip = 'off') +
+          theme_tree2(plot.margin=margin(6, 320, 6, 6))
+
+p_age_d <- p_age_d + scale_x_ggtree(breaks = c(-100, -80, -60, -40, -20, 0),
+                              labels = c("100 Ma", "80 Ma", "60 Ma", "40 Ma", "20 Ma", "0 Ma"))
+
+#p_age_d <- p_age_d + theme(axis.line.x = element_line(color = "black",
+#                                 linewidth = 0.2,
+#                                 linetype = 1))
+#p_age_d <- p_age_d + theme_tree2(legend.position = c(.05, .85))
+#p_age_d <- p_age_d + ggplot2::xlim(-85, 70)
+
+p_age_d
+```
+
+## Table with mean mrca age and confidence intervals
+
+```{r}
+time_table <- as.data.frame(p_age_a$data[,c("node","label","height","height_0.95_HPD")])
+time_table$height <- round(time_table$height,2)
+
+unlist_table <- function(data) {
+  temp1 <- sapply(data, is.list)
+  temp2 <- do.call(
+    cbind, lapply(data[temp1], function(x)
+      data.frame(do.call(rbind, x), check.names=FALSE)))
+  cbind(data[!temp1], temp2)
+}
+
+time_table <- unlist_table(time_table)
+time_table$height_0.95_HPD.1<- round(time_table$height_0.95_HPD.1,2)
+time_table$height_0.95_HPD.2<- round(time_table$height_0.95_HPD.2,2)
+
+time_table[32:56,c("node","height","height_0.95_HPD.1","height_0.95_HPD.2")]
+
+```
+

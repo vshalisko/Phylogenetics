@@ -1,0 +1,193 @@
+---
+title: "Estimation of potentially informative sites"
+author: "Viacheslav Shalisko"
+date: "1/4/2024"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ape)
+library(ips)
+```
+
+# Prepare data
+
+* The inpud data should be alignment in NEXUS format
+* The missing data should be N, not ?, if there are some ? they will be replaced by N
+* The gaps are treated as significant characters, so the variable sites count may include gaps (except the trailing gaps that are considered as N)
+* If you need to count ony variable sites in the sense of nucleotide substitutions, excluding gaps, replace all gaps by N
+
+
+
+```{r}
+my_alignment <- read.nex("10_regions_NEW2 - Alineamiento.nex.txt")
+str(my_alignment)
+print(my_alignment)
+
+my_alignment_matrix <- as.character(my_alignment)
+
+str(my_alignment_matrix)
+my_alignment_matrix[my_alignment_matrix == '?'] <- 'n'
+my_alignment_matrix[my_alignment_matrix == '-'] <- 'n'
+
+my_alignment_ok <- as.DNAbin(my_alignment_matrix)
+
+my_alignment_ok <- del.rowgapsonly(my_alignment_ok)
+my_alignment_ok <- del.colgapsonly(my_alignment_ok)
+
+str(my_alignment_ok)
+print(my_alignment_ok)
+
+
+my_accD <- my_alignment_ok[1:31,1:249]
+my_ITS <- my_alignment_ok[1:31,250:1162]
+my_matK <- my_alignment_ok[1:31,1163:2150]
+my_psbAtrnH <- my_alignment_ok[1:31,2151:2635]
+my_psbBTN <- my_alignment_ok[1:31,2636:3420]
+my_rbcL <- my_alignment_ok[1:31,3421:4134]
+my_rpl16 <- my_alignment_ok[1:31,4135:5073]
+my_trnGS <- my_alignment_ok[1:31,5074:5605]
+my_rpoB <- my_alignment_ok[1:31,5606:6228]
+my_rpoC1 <- my_alignment_ok[1:31,6229:7072]
+
+```
+
+```{r fig.width=10, fig.height=10}
+print("Without modification")
+image(my_alignment, cex.lab = 0.5)
+print("Gaps as N")
+image(my_alignment_ok, cex.lab = 0.5)
+
+image(my_accD, cex.lab = 0.5)
+image(my_ITS, cex.lab = 0.5)
+image(my_matK, cex.lab = 0.5)
+image(my_psbAtrnH, cex.lab = 0.5)
+image(my_psbBTN, cex.lab = 0.5)
+image(my_rbcL, cex.lab = 0.5)
+image(my_rpl16, cex.lab = 0.5)
+image(my_trnGS, cex.lab = 0.5)
+image(my_rpoB, cex.lab = 0.5)
+image(my_rpoC1, cex.lab = 0.5)
+```
+
+
+# Whole alignment
+
+```{r}
+dim(my_alignment)[2]
+length(seg.sites(my_alignment, strict = FALSE, trailingGapsAsN = TRUE))
+pis(my_alignment, what = "absolute", use.ambiguities = FALSE)
+pis(my_alignment, what = "fraction", use.ambiguities = FALSE)
+pis(my_alignment, what = "index", use.ambiguities = FALSE)
+base.freq(my_alignment)
+
+dim(my_alignment_ok)[2]
+length(seg.sites(my_alignment_ok, strict = FALSE, trailingGapsAsN = TRUE))
+pis(my_alignment_ok, what = "absolute", use.ambiguities = FALSE)
+pis(my_alignment_ok, what = "fraction", use.ambiguities = FALSE)
+pis(my_alignment_ok, what = "index", use.ambiguities = FALSE)
+base.freq(my_alignment_ok)
+```
+
+# matK
+
+```{r}
+# my_matK <- read.nex("Cedrela_matK.nex")
+print(my_matK)
+dim(my_matK)[2]
+length(seg.sites(my_matK, strict = FALSE, trailingGapsAsN = TRUE))
+pis(my_matK, what = "absolute", use.ambiguities = FALSE)
+```
+
+# rpl16
+
+```{r}
+# my_rpl16 <- read.nex("Cedrela_rpl16.nex")
+print(my_rpl16)
+dim(my_rpl16)[2]
+length(seg.sites(my_rpl16, strict = FALSE, trailingGapsAsN = TRUE))
+pis(my_rpl16, what = "absolute", use.ambiguities = FALSE)
+```
+
+# psbA-trnH
+
+```{r}
+# my_psbAtrnH <- read.nex("Cedrela_psbA-trnH.nex")
+print(my_psbAtrnH)
+dim(my_psbAtrnH)[2]
+length(seg.sites(my_psbAtrnH, strict = FALSE, trailingGapsAsN = TRUE))
+pis(my_psbAtrnH, what = "absolute", use.ambiguities = FALSE)
+```
+
+# rpoC1
+
+```{r}
+# my_rpoC1 <- read.nex("Cedrela_rpoC1.nex")
+print(my_rpoC1)
+dim(my_rpoC1)[2]
+length(seg.sites(my_rpoC1, strict = FALSE, trailingGapsAsN = TRUE))
+pis(my_rpoC1, what = "absolute", use.ambiguities = FALSE)
+```
+
+# psbB-T-N
+
+```{r}
+# my_psbBTN <- read.nex("Cedrela_psbB-T-N.nex")
+print(my_psbBTN)
+dim(my_psbBTN)[2]
+length(seg.sites(my_psbBTN, strict = FALSE, trailingGapsAsN = TRUE))
+pis(my_psbBTN, what = "absolute", use.ambiguities = FALSE)
+```
+
+# accD
+
+```{r}
+# my_accD <- read.nex("Cedrela_accD.nex")
+print(my_accD)
+dim(my_accD)[2]
+length(seg.sites(my_accD, strict = FALSE, trailingGapsAsN = TRUE))
+pis(my_accD, what = "absolute", use.ambiguities = FALSE)
+```
+
+# rpoB
+
+```{r}
+# my_rpoB <- read.nex("Cedrela_rpoB.nex")
+print(my_rpoB)
+dim(my_rpoB)[2]
+length(seg.sites(my_rpoB, strict = FALSE, trailingGapsAsN = TRUE))
+pis(my_rpoB, what = "absolute", use.ambiguities = FALSE)
+```
+
+# rbcLa
+
+```{r}
+# my_rbcL <- read.nex("Cedrela_rbcL.nex")
+print(my_rbcL)
+dim(my_rbcL)[2]
+length(seg.sites(my_rbcL, strict = FALSE, trailingGapsAsN = TRUE))
+pis(my_rbcL, what = "absolute", use.ambiguities = FALSE)
+```
+
+# trnS-G
+
+```{r}
+# my_trnGS <- read.nex("Cedrela_trnS-G.nex")
+print(my_trnGS)
+dim(my_trnGS)[2]
+length(seg.sites(my_trnGS, strict = FALSE, trailingGapsAsN = TRUE))
+pis(my_trnGS, what = "absolute", use.ambiguities = FALSE)
+```
+
+# ITS
+
+```{r}
+# my_ITS <- read.nex("Cedrela_ITS.nex")
+print(my_ITS)
+dim(my_ITS)[2]
+length(seg.sites(my_ITS, strict = FALSE, trailingGapsAsN = TRUE))
+pis(my_ITS, what = "absolute", use.ambiguities = FALSE)
+```
+
+
