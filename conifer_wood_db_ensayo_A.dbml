@@ -1,0 +1,24 @@
+
+Table caracteres {
+  caracter_id integer [primary key]
+  caracter_code varchar
+  descripcion text 
+}
+
+Table especimenes {
+  especimen_id integer [primary key]
+  origen varchar
+  taxon varchar
+  edad varchar
+}
+
+Table estados_caracter {
+  estado_id integer [primary key]
+  tipo_caracter integer [not null]
+  especimen integer [not null]
+  estado varchar
+}
+
+Ref: estados_caracter.especimen > especimenes.especimen_id
+
+Ref: estados_caracter.tipo_caracter > caracteres.caracter_id
